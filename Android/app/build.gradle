@@ -1,0 +1,77 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'kotlin-kapt'
+}
+
+android {
+    namespace 'com.productivityapp'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.productivityapp"
+        minSdk 28           // Android 9+ — needed for HealthConnect + NFC APIs
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+
+        // Read VPS URL and API key from local.properties (never hardcode secrets)
+        def localProps = new Properties()
+        localProps.load(new FileInputStream(rootProject.file("local.properties")))
+        buildConfigField "String", "VPS_BASE_URL",      "\"${localProps['VPS_BASE_URL']}\""
+        buildConfigField "String", "API_SECRET_KEY",    "\"${localProps['API_SECRET_KEY']}\""
+        buildConfigField "String", "DEVICE_ID",         "\"${localProps['DEVICE_ID'] ?: 'nothing_phone_2'}\""
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            applicationIdSuffix ".debug"
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
+        viewBinding true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = '17' }
+}
+
+dependencies {
+    // Kotlin coroutines
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+
+    // Retrofit + OkHttp for HTTP to VPS
+    implementation 'com.squareup.retrofit2:retrofit:2.9.0'
+    implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    implementation 'com.squareup.okhttp3:logging-interceptor:4.12.0'
+
+    // Gson for JSON serialisation
+    implementation 'com.google.code.gson:gson:2.10.1'
+
+    // HealthConnect (step tracking)
+    implementation 'androidx.health.connect:connect-client:1.1.0-alpha07'
+
+    // DataStore (stores VPS URL override + device token)
+    implementation 'androidx.datastore:datastore-preferences:1.0.0'
+
+    // WorkManager (boot-time restart + periodic sync)
+    implementation 'androidx.work:work-runtime-ktx:2.9.0'
+
+    // Lifecycle
+    implementation 'androidx.lifecycle:lifecycle-service:2.7.0'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.7.0'
+
+    // AppCompat for the minimal setup Activity
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.11.0'
+}

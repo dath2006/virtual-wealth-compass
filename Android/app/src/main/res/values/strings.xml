@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Productivity Economy</string>
+    <string name="accessibility_service_description">
+        Tracks which apps you use to apply real-time distraction billing.
+        Only monitors foreground app changes — does NOT read screen content.
+    </string>
+</resources>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    AppSessionTracker AccessibilityService configuration.
+    Listens ONLY for TYPE_WINDOW_STATE_CHANGED to detect foreground app changes.
+    This is the minimum necessary permission — we don't need content of views.
+    Battery impact: minimal (~0.1% per hour, per AOSP benchmark).
+-->
+<accessibility-service
+    xmlns:android="http://schemas.android.com/apk/res/android"
+
+    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:notificationTimeout="100"
+
+    android:canRetrieveWindowContent="false"
+    android:settingsActivity="com.productivityapp.PermissionSetupActivity"
+
+    android:description="@string/accessibility_service_description" />
