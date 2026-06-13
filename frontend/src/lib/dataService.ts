@@ -48,7 +48,18 @@ const apiFetch = async <T>(path: string, init?: RequestInit): Promise<T> => {
       ...(init?.headers ?? {}),
     },
   });
-  if (!res.ok) throw new Error(`API ${path} failed: ${res.status}`);
+  if (!res.ok) {
+    let errMsg = `API ${path} failed: ${res.status}`;
+    try {
+      const errJson = await res.json();
+      if (errJson && typeof errJson === "object") {
+        errMsg = errJson.detail || errJson.message || errJson.error || errMsg;
+      }
+    } catch {
+      // Ignore if response is not JSON
+    }
+    throw new Error(errMsg);
+  }
   return res.json();
 };
 

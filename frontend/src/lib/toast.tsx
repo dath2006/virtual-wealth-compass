@@ -1,9 +1,15 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useState, useEffect, type ReactNode } from "react";
 import { CheckCircle2, AlertCircle, Info } from "lucide-react";
 
 type ToastKind = "success" | "error" | "info";
 interface Toast { id: number; kind: ToastKind; message: string }
+
+const listeners = new Set<(message: string, kind: ToastKind) => void>();
+
+export const showToast = (message: string, kind: ToastKind = "success") => {
+  listeners.forEach((listener) => listener(message, kind));
+};
 
 interface Ctx {
   toast: (message: string, kind?: ToastKind) => void;
@@ -24,10 +30,21 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     }, 3200);
   }, []);
 
+  useEffect(() => {
+    const handleToast = (message: string, kind: ToastKind) => {
+      toast(message, kind);
+    };
+    listeners.add(handleToast);
+    return () => {
+      listeners.delete(handleToast);
+    };
+  }, [toast]);
+
+
   return (
     <ToastCtx.Provider value={{ toast }}>
       {children}
-      <div className="pointer-events-none fixed bottom-4 right-4 z-[100] flex w-[min(92vw,360px)] flex-col gap-2">
+      <div className="pointer-events-none fixed bottom-4 right-4 z-100 flex w-[min(92vw,360px)] flex-col gap-2">
         <AnimatePresence>
           {items.map((t) => {
             const Icon =

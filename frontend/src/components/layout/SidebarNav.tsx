@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import {
@@ -19,6 +20,17 @@ const items = [
 
 export function SidebarNav() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const activeRef = useRef<HTMLAnchorElement | null>(null);
+
+  useEffect(() => {
+    if (activeRef.current) {
+      activeRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "center",
+      });
+    }
+  }, [pathname]);
 
   return (
     <>
@@ -65,27 +77,30 @@ export function SidebarNav() {
       </aside>
 
       {/* Mobile bottom tab bar */}
-      <nav className="glass-strong fixed inset-x-3 bottom-3 z-40 flex items-center justify-between rounded-2xl px-2 py-1.5 md:hidden">
-        {items.map((it) => {
-          const active = pathname === it.to;
-          const Icon = it.icon;
-          return (
-            <Link
-              key={it.to}
-              to={it.to}
-              className="relative flex flex-1 flex-col items-center gap-0.5 rounded-xl px-2 py-1.5 text-[10px] font-medium text-foreground/60 transition active:scale-95"
-            >
-              {active && (
-                <motion.span
-                  layoutId="mobile-active"
-                  className="absolute inset-0 -z-10 rounded-xl bg-white/85"
-                />
-              )}
-              <Icon className={`size-[18px] ${active ? "text-primary" : ""}`} />
-              <span className={active ? "text-foreground" : ""}>{it.label}</span>
-            </Link>
-          );
-        })}
+      <nav className="glass-strong fixed inset-x-3 bottom-3 z-40 rounded-2xl md:hidden overflow-hidden">
+        <div className="flex items-center gap-1 overflow-x-auto scrollbar-none px-2 py-1.5">
+          {items.map((it) => {
+            const active = pathname === it.to;
+            const Icon = it.icon;
+            return (
+              <Link
+                key={it.to}
+                to={it.to}
+                ref={active ? activeRef : undefined}
+                className="relative flex flex-col items-center gap-0.5 rounded-xl px-2 py-1.5 text-[10px] font-medium text-foreground/60 transition active:scale-95 shrink-0 min-w-[68px]"
+              >
+                {active && (
+                  <motion.span
+                    layoutId="mobile-active"
+                    className="absolute inset-0 -z-10 rounded-xl bg-white/85"
+                  />
+                )}
+                <Icon className={`size-[18px] ${active ? "text-primary" : ""}`} />
+                <span className={active ? "text-foreground" : ""}>{it.label}</span>
+              </Link>
+            );
+          })}
+        </div>
       </nav>
     </>
   );

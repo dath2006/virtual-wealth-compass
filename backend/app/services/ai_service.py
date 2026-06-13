@@ -36,8 +36,12 @@ async def _call_ai_text(prompt: str, max_tokens: int = 500, temperature: float =
                 if resp.status_code == 200:
                     raw = resp.json()
                     return raw["choices"][0]["message"]["content"]
-        except Exception:
-            pass
+                else:
+                    print(f"DEBUG: Nvidia API returned status {resp.status_code}: {resp.text}")
+        except Exception as e:
+            print(f"DEBUG: Nvidia API connection exception: {e}")
+            import traceback
+            traceback.print_exc()
 
     # Fallback to Gemini
     if settings.google_ai_studio_api_key:
@@ -100,8 +104,12 @@ async def _call_ai_vision(prompt: str, image_base64: str, max_tokens: int = 500,
                 if resp.status_code == 200:
                     raw = resp.json()
                     return raw["choices"][0]["message"]["content"]
-        except Exception:
-            pass
+                else:
+                    print(f"DEBUG: Nvidia Vision API returned status {resp.status_code}: {resp.text}")
+        except Exception as e:
+            print(f"DEBUG: Nvidia Vision API connection exception: {e}")
+            import traceback
+            traceback.print_exc()
 
     # Fallback to Gemini
     if settings.google_ai_studio_api_key:
@@ -188,7 +196,10 @@ Discretionary = food delivery apps, online shopping, entertainment subscriptions
             return "UNKNOWN", False
         parsed = _parse_json(response_text)
         return parsed.get("class", "UNKNOWN"), True
-    except Exception:
+    except Exception as e:
+        print(f"DEBUG: classify_transaction exception: {e}")
+        import traceback
+        traceback.print_exc()
         return "UNKNOWN", False
 
 
