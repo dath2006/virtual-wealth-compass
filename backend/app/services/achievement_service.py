@@ -3,7 +3,7 @@ from sqlalchemy import select, func, and_
 from app.models.achievement import AIChallenge, ChallengeStatus, RewardType
 from app.models.ledger import LedgerEntry, LedgerCategory
 from app.models.stats import DailyStats
-from app.services.ai_service import _call_gemini_text
+from app.services.ai_service import _call_ai_text
 from app.services import ledger_service
 import json, datetime
 
@@ -103,7 +103,7 @@ Respond ONLY with a JSON array, no markdown:
   }}
 ]"""
 
-    response = await _call_gemini_text(prompt, max_tokens=600)
+    response = await _call_ai_text(prompt, max_tokens=600)
     try:
         return json.loads(response)
     except Exception:

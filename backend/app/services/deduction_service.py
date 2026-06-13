@@ -1,5 +1,5 @@
 import json
-from app.services.ai_service import _call_gemini_text
+from app.services.ai_service import _call_ai_text
 from app.services import ledger_service
 from app.models.ledger import LedgerCategory
 
@@ -39,7 +39,7 @@ Respond ONLY with valid JSON, no markdown:
   "reasoning": "one or two sentence explanation"
 }}"""
 
-    response = await _call_gemini_text(prompt, max_tokens=1000)
+    response = await _call_ai_text(prompt, max_tokens=1000)
     try:
         return json.loads(response)
     except Exception:

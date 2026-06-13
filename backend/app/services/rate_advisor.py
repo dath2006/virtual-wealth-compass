@@ -4,7 +4,7 @@ from app.models.ledger import LedgerEntry, LedgerCategory
 from app.models.stats import DailyStats
 from app.models.rules import DistractionRule
 from app.models.suggestion import RateSuggestion
-from app.services.ai_service import _call_gemini_text
+from app.services.ai_service import _call_ai_text
 from app.services.economy_service import get_settings
 import json, datetime
 
@@ -19,7 +19,7 @@ async def generate_rate_suggestions(db: AsyncSession) -> list[dict]:
     settings = await get_settings(db)
     summary  = await _build_economy_summary(db, settings)
     prompt   = _build_advisor_prompt(summary, settings)
-    response = await _call_gemini_text(prompt, max_tokens=800)
+    response = await _call_ai_text(prompt, max_tokens=800)
 
     try:
         suggestions = json.loads(response)
