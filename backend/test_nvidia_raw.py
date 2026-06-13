@@ -25,7 +25,7 @@ async def main():
     # 2. Test Evidence Validation (Vision)
     print("2. Testing validate_evidence (Llama-3.2-11b-vision)...")
     # Tiny 1x1 black JPEG base64
-    dummy_image_base64 = "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA="
+    dummy_image_base64 = "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA="
     
     claim = "Studying algorithms for 2 hours"
     subject = "Computer Science"

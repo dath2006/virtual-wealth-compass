@@ -24,7 +24,6 @@ async def _call_ai_text(prompt: str, max_tokens: int = 500, temperature: float =
             }
             payload = {
                 "model": settings.nvidia_model,
-                "reasoning_effort": "high",
                 "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": max_tokens,
                 "temperature": temperature,
