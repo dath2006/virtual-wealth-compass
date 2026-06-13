@@ -9,7 +9,12 @@ class Settings(BaseSettings):
     api_secret_key: str
 
     # Google AI Studio
-    google_ai_studio_api_key: str
+    google_ai_studio_api_key: str | None = None
+
+    # Nvidia API
+    nvidia_api_key: str | None = None
+    nvidia_model: str = "mistralai/mistral-medium-3.5-128b"
+    nvidia_vision_model: str = "nvidia/llama-3.2-11b-vision-instruct"
 
     # Economy defaults
     default_hourly_earn_rate: int = 100

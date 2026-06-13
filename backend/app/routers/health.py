@@ -18,7 +18,20 @@ async def health_check(db: AsyncSession = Depends(get_db)):
 
     ai_status = "unconfigured"
     settings = get_settings()
-    if settings.google_ai_studio_api_key:
+    if settings.nvidia_api_key:
+        try:
+            # Quick check if Nvidia API is reachable
+            url = "https://integrate.api.nvidia.com/v1/models"
+            headers = {"Authorization": f"Bearer {settings.nvidia_api_key}"}
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(url, headers=headers, timeout=3.0)
+                if resp.status_code == 200:
+                    ai_status = "reachable"
+                else:
+                    ai_status = f"error: Nvidia HTTP status {resp.status_code}"
+        except Exception as e:
+            ai_status = f"error: {str(e)}"
+    elif settings.google_ai_studio_api_key:
         try:
             # Quick check if API key is valid / API is reachable
             url = f"https://generativelanguage.googleapis.com/v1beta/models?key={settings.google_ai_studio_api_key}"
@@ -27,7 +40,7 @@ async def health_check(db: AsyncSession = Depends(get_db)):
                 if resp.status_code == 200:
                     ai_status = "reachable"
                 else:
-                    ai_status = f"error: HTTP status {resp.status_code}"
+                    ai_status = f"error: Gemini HTTP status {resp.status_code}"
         except Exception as e:
             ai_status = f"error: {str(e)}"
 

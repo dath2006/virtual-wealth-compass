@@ -49,7 +49,8 @@
         android:name=".ProductivityApp"
         android:allowBackup="false"
         android:usesCleartextTraffic="true"
-        android:icon="@android:mipmap/sym_def_app_icon"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="Productivity Economy"
         android:theme="@style/Theme.ProductivityApp">
 

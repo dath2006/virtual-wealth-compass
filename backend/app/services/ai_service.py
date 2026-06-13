@@ -4,31 +4,128 @@ import base64
 from app.config import get_settings
 
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+NVIDIA_API_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 
 
-async def _call_gemini_text(prompt: str, max_tokens: int = 500) -> str:
+async def _call_ai_text(prompt: str, max_tokens: int = 500, temperature: float = 0.3) -> str:
     """
-    Shared helper: send a text-only prompt to Gemini and return the raw text response.
-    Returns empty string on failure (callers should handle gracefully).
+    Unified text generation helper:
+    1. Tries Nvidia API (default) if nvidia_api_key is configured.
+    2. Falls back to Gemini API if Nvidia fails or is unconfigured.
     """
     settings = get_settings()
-    if not settings.google_ai_studio_api_key:
-        return ""
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(
-                f"{GEMINI_API_URL}?key={settings.google_ai_studio_api_key}",
-                json={
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"temperature": 0.3, "maxOutputTokens": max_tokens},
-                },
-            )
-            if resp.status_code != 200:
-                return ""
-            raw = resp.json()
-            return raw["candidates"][0]["content"]["parts"][0]["text"]
-    except Exception:
-        return ""
+
+    # Try Nvidia NIM first
+    if settings.nvidia_api_key:
+        try:
+            headers = {
+                "Authorization": f"Bearer {settings.nvidia_api_key}",
+                "Accept": "application/json"
+            }
+            payload = {
+                "model": settings.nvidia_model,
+                "reasoning_effort": "high",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "top_p": 1.00,
+                "stream": False
+            }
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(NVIDIA_API_URL, headers=headers, json=payload)
+                if resp.status_code == 200:
+                    raw = resp.json()
+                    return raw["choices"][0]["message"]["content"]
+        except Exception:
+            pass
+
+    # Fallback to Gemini
+    if settings.google_ai_studio_api_key:
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(
+                    f"{GEMINI_API_URL}?key={settings.google_ai_studio_api_key}",
+                    json={
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {"temperature": temperature, "maxOutputTokens": max_tokens},
+                    },
+                )
+                if resp.status_code == 200:
+                    raw = resp.json()
+                    return raw["candidates"][0]["content"]["parts"][0]["text"]
+        except Exception:
+            pass
+
+    return ""
+
+
+async def _call_ai_vision(prompt: str, image_base64: str, max_tokens: int = 500, temperature: float = 0.1) -> str:
+    """
+    Unified vision analysis helper:
+    1. Tries Nvidia API (default) using the vision model if nvidia_api_key is configured.
+    2. Falls back to Gemini API if Nvidia fails or is unconfigured.
+    """
+    settings = get_settings()
+
+    # Try Nvidia NIM first
+    if settings.nvidia_api_key:
+        try:
+            headers = {
+                "Authorization": f"Bearer {settings.nvidia_api_key}",
+                "Accept": "application/json"
+            }
+            payload = {
+                "model": settings.nvidia_vision_model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{image_base64}"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "top_p": 1.00,
+                "stream": False
+            }
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(NVIDIA_API_URL, headers=headers, json=payload)
+                if resp.status_code == 200:
+                    raw = resp.json()
+                    return raw["choices"][0]["message"]["content"]
+        except Exception:
+            pass
+
+    # Fallback to Gemini
+    if settings.google_ai_studio_api_key:
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(
+                    f"{GEMINI_API_URL}?key={settings.google_ai_studio_api_key}",
+                    json={
+                        "contents": [{
+                            "parts": [
+                                {"text": prompt},
+                                {"inline_data": {"mime_type": "image/jpeg", "data": image_base64}}
+                            ]
+                        }],
+                        "generationConfig": {"temperature": temperature, "maxOutputTokens": max_tokens}
+                    }
+                )
+                if resp.status_code == 200:
+                    raw = resp.json()
+                    return raw["candidates"][0]["content"]["parts"][0]["text"]
+        except Exception:
+            pass
+
+    return ""
 
 
 def _parse_json(text: str) -> dict:
@@ -42,6 +139,7 @@ def _parse_json(text: str) -> dict:
             lines = lines[:-1]
         text = "\n".join(lines).strip()
     return json.loads(text)
+
 
 async def classify_transaction(
     merchant_name: str | None,
@@ -73,7 +171,7 @@ async def classify_transaction(
         if any(k in lower for k in discretionary_keywords):
             return "DISCRETIONARY", True
 
-    # ── Slow path — call Gemini for ambiguous merchant ──
+    # ── Slow path — call AI for ambiguous merchant ──
     prompt = f"""Classify this UPI payment. Respond ONLY with valid JSON, no markdown:
 {{"class": "ESSENTIAL" or "DISCRETIONARY", "confidence": 0.0-1.0}}
 
@@ -84,26 +182,12 @@ Transaction note: {raw_text[:200]}
 Essential = groceries at physical store, medicine, rent, electricity/water bill, local transport fares.
 Discretionary = food delivery apps, online shopping, entertainment subscriptions, restaurants."""
 
-    settings = get_settings()
-    if not settings.google_ai_studio_api_key:
-        return "UNKNOWN", False
-
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                f"{GEMINI_API_URL}?key={settings.google_ai_studio_api_key}",
-                json={
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"temperature": 0.1, "maxOutputTokens": 500}
-                }
-            )
-            if response.status_code != 200:
-                return "UNKNOWN", False
-
-            raw = response.json()
-            text = raw["candidates"][0]["content"]["parts"][0]["text"]
-            parsed = _parse_json(text)
-            return parsed.get("class", "UNKNOWN"), True
+        response_text = await _call_ai_text(prompt, max_tokens=500, temperature=0.1)
+        if not response_text:
+            return "UNKNOWN", False
+        parsed = _parse_json(response_text)
+        return parsed.get("class", "UNKNOWN"), True
     except Exception:
         return "UNKNOWN", False
 
@@ -146,32 +230,12 @@ Award partial credit if the image partially supports the claim.
 Respond ONLY with valid JSON, no markdown, no preamble:
 {{"verified": true or false, "confidence": 0.0-1.0, "approved_amount": integer, "reasoning": "one sentence"}}"""
 
-    settings = get_settings()
-    if not settings.google_ai_studio_api_key:
-        return {"verified": False, "approved_amount": 0,
-                "reasoning": "AI key not configured", "confidence": 0.0}
-
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                f"{GEMINI_API_URL}?key={settings.google_ai_studio_api_key}",
-                json={
-                    "contents": [{
-                        "parts": [
-                            {"text": prompt},
-                            {"inline_data": {"mime_type": "image/jpeg", "data": image_base64}}
-                        ]
-                    }],
-                    "generationConfig": {"temperature": 0.1, "maxOutputTokens": 500}
-                }
-            )
-            if response.status_code != 200:
-                return {"verified": False, "approved_amount": 0,
-                        "reasoning": f"AI service error {response.status_code}", "confidence": 0.0}
-
-            raw = response.json()
-            text = raw["candidates"][0]["content"]["parts"][0]["text"]
-            return _parse_json(text)
+        response_text = await _call_ai_vision(prompt, image_base64, max_tokens=500, temperature=0.1)
+        if not response_text:
+            return {"verified": False, "approved_amount": 0,
+                    "reasoning": "AI service failed or returned empty response", "confidence": 0.0}
+        return _parse_json(response_text)
     except Exception as e:
         return {"verified": False, "approved_amount": 0,
                 "reasoning": f"AI validation exception: {str(e)}", "confidence": 0.0}
