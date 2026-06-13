@@ -26,14 +26,11 @@ services:
         condition: service_healthy
     env_file: .env
     ports:
-      - "8000:8000"
+      - "8112:8112"
     volumes:
       - .:/app
     command: >
-      uvicorn app.main:app
-      --host 0.0.0.0
-      --port 8000
-      --reload
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8112"
 
 volumes:
   postgres_data:
