@@ -275,7 +275,10 @@ export function PurchasedPassCard({
   if (status === "ACTIVE") {
     borderClass = "border-violet/40 ring-1 ring-violet/20 bg-violet/5";
     statusBadge = "bg-violet text-white";
-  } else if (status === "EXPIRED" || status === "CONSUMED") {
+  } else if (status === "CONSUMED") {
+    borderClass = "border-emerald-400/30 bg-emerald-50/40";
+    statusBadge = "bg-emerald-100 text-emerald-700";
+  } else if (status === "EXPIRED") {
     borderClass = "opacity-70 border-white/20";
     statusBadge = "bg-muted text-muted-foreground";
   } else if (status === "CANCELLED") {

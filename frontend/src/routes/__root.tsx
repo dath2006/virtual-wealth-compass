@@ -71,7 +71,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Productivity Economy" },
+      { title: "Effex" },
       { name: "description", content: "Your productivity, money, and focus — gamified into one virtual economy." },
       { name: "author", content: "Lovable" },
       { property: "og:title", content: "Productivity Economy" },
@@ -278,21 +278,20 @@ function RootLayoutContent() {
 
   return (
     <div className="relative">
-      {/* Page content — blurs out when sleeping */}
-      <motion.div
-        animate={isSleeping ? { filter: "blur(8px)", scale: 0.98, opacity: 0.4 } : { filter: "blur(0px)", scale: 1, opacity: 1 }}
-        transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-        className="mx-auto flex w-full max-w-[1400px] gap-6 px-3 py-4 md:px-5 md:py-5"
-        style={{ transformOrigin: "center top", willChange: "filter, transform, opacity" }}
-      >
+      <div className="mx-auto flex w-full max-w-[1400px] gap-6 px-3 py-4 md:px-5 md:py-5">
         <SidebarNav />
-        <main className="min-w-0 flex-1">
+        {/* Only the main content area blurs during sleep */}
+        <motion.main
+          animate={isSleeping ? { filter: "blur(8px)", scale: 0.98, opacity: 0.4 } : { filter: "blur(0px)", scale: 1, opacity: 1 }}
+          transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+          className="min-w-0 flex-1"
+          style={{ transformOrigin: "center top", willChange: "filter, transform, opacity" }}
+        >
           <ActivePassBanner />
           <Outlet />
-        </main>
-      </motion.div>
+        </motion.main>
+      </div>
 
-      {/* Sleep overlay mounts on top with AnimatePresence */}
       <AnimatePresence mode="wait">
         {isSleeping && sleepAtMs > 0 && (
           <SleepOverlay

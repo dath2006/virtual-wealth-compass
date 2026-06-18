@@ -14,7 +14,7 @@ export function PageLayout({ title, subtitle, actions, children }: Props) {
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-      className="min-w-0 pb-28 md:pb-6"
+      className="min-w-0 pb-20 md:pb-6"
     >
       <header className="mb-6 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-4 sm:flex sm:flex-wrap sm:items-end sm:justify-between">
         <div className="min-w-0">

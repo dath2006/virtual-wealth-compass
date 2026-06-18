@@ -69,9 +69,15 @@ function OathsPage() {
           </div>
         ) : (
           active.map((o, i) => <OathCard key={o.id} oath={o} index={i} onRepay={async () => {
-            await repayOath(o.id);
-            refresh();
-            toast("Oath repaid. Credit score boost incoming.");
+            try {
+              const result = await repayOath(o.id);
+              refresh();
+              const delta = result.credit_score_delta;
+              const deltaStr = delta > 0 ? ` (+${delta} credit)` : delta < 0 ? ` (${delta} credit)` : "";
+              toast(`Oath repaid — ${result.resolved_status?.replace(/_/g, " ").toLowerCase() ?? "done"}${deltaStr}`);
+            } catch (err: any) {
+              toast(`Repay failed: ${err.message ?? "insufficient balance or server error"}`);
+            }
           }} />)
         )}
       </div>
@@ -189,14 +195,15 @@ function OathCard({ oath, onRepay, index }: { oath: Oath; onRepay: () => void; i
 }
 
 function StatusPill({ status }: { status: Oath["status"] }) {
-  const map: Record<Oath["status"], string> = {
-    ACTIVE: "bg-primary/15 text-primary",
-    OVERDUE: "bg-destructive/15 text-destructive",
-    REPAID_EARLY: "bg-success/15 text-success-foreground",
-    REPAID_ONTIME: "bg-sky-500/15 text-sky-700",
-    DEFAULTED: "bg-destructive/15 text-destructive",
+  const map: Record<string, string> = {
+    ACTIVE:         "bg-primary/15 text-primary",
+    OVERDUE:        "bg-destructive/15 text-destructive",
+    REPAID_EARLY:   "bg-success/15 text-success-foreground",
+    REPAID_ONTIME:  "bg-sky-500/15 text-sky-700",
+    REPAID_ON_TIME: "bg-sky-500/15 text-sky-700",
+    DEFAULTED:      "bg-destructive/15 text-destructive",
   };
-  const label = status.replace("_", " ").toLowerCase();
+  const label = status.replace(/_/g, " ").toLowerCase();
   return <span className={`chip ${map[status]}`}>{label}</span>;
 }
 

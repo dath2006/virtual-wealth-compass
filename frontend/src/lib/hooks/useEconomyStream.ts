@@ -1,30 +1,18 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
-import { isMockMode } from "../dataService";
+import { useToast } from "../toast";
 
-/**
- * useEconomyStream
- *
- * Connects to GET /stream and handles live economy events from the backend.
- * Automatically reconnects on disconnect (built into fetchEventSource).
- * Does nothing in mock mode.
- *
- * Events received:
- *  - init:         initial balance on connect
- *  - drain:        distraction app session ended → balance decreased
- *  - earn:         NFC session/steps/exercise → balance increased
- *  - upi:          UPI payment detected → balance decreased
- *  - balance:      general balance refresh
- *  - pass_expired: marketplace pass expired
- *  - boss_beaten:  boss fight completed → loot awarded
- */
+const fmtINR = (n: number) =>
+  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
+
 export function useEconomyStream(
   onBalanceUpdate?: (balance: number) => void,
   onDrain?: (app: string, amount: number, surge: boolean) => void,
 ) {
-  const qc = useQueryClient();
-  const ctrl = useRef<AbortController | null>(null);
+  const qc    = useQueryClient();
+  const { toast } = useToast();
+  const ctrl  = useRef<AbortController | null>(null);
 
   const invalidateBalance = useCallback(() => {
     qc.invalidateQueries({ queryKey: ["balance"] });
@@ -32,12 +20,11 @@ export function useEconomyStream(
   }, [qc]);
 
   useEffect(() => {
-    if (isMockMode()) return;   // SSE not available in mock mode
-
     const BASE = import.meta.env.VITE_API_BASE_URL ?? "";
     const KEY  = import.meta.env.VITE_API_KEY ?? "";
-    const url  = `${BASE}/stream`;
+    if (!BASE) return;   // no server configured yet — skip SSE
 
+    const url = `${BASE}/stream`;
     ctrl.current = new AbortController();
 
     fetchEventSource(url, {
@@ -45,15 +32,12 @@ export function useEconomyStream(
       signal: ctrl.current.signal,
 
       onopen: async (res) => {
-        if (!res.ok) {
-          throw new Error(`SSE connection failed: ${res.status}`);
-        }
+        if (!res.ok) throw new Error(`SSE connection failed: ${res.status}`);
       },
 
       onmessage: (ev) => {
         try {
           const data = JSON.parse(ev.data);
-
           switch (data.type) {
             case "init":
             case "balance":
@@ -64,48 +48,43 @@ export function useEconomyStream(
               onBalanceUpdate?.(data.balance);
               onDrain?.(data.app, data.amount, data.surge ?? false);
               invalidateBalance();
-              // Also update usage/distraction queries
               qc.invalidateQueries({ queryKey: ["usage"] });
               break;
 
             case "earn":
               onBalanceUpdate?.(data.balance);
               invalidateBalance();
+              toast(`✅ Earned ${fmtINR(data.amount)} — ${data.source ?? "focus"}`);
               break;
 
             case "upi":
               onBalanceUpdate?.(data.balance);
               invalidateBalance();
+              toast(`💳 UPI: ${fmtINR(data.amount)} deducted${data.merchant ? ` at ${data.merchant}` : ""}`);
               break;
 
             case "pass_expired":
               qc.invalidateQueries({ queryKey: ["my_passes"] });
               qc.invalidateQueries({ queryKey: ["marketplace_catalogue"] });
+              toast(`🎟️ Pass expired`);
               break;
 
             case "boss_beaten":
               qc.invalidateQueries({ queryKey: ["bosses"] });
               invalidateBalance();
+              toast(`🏆 Boss beaten! Loot: ${data.loot_description ?? "reward"}`);
               break;
           }
-        } catch {
-          // ignore parse errors
-        }
+        } catch { /* ignore parse errors */ }
       },
 
       onerror: (err) => {
         console.warn("SSE error, will reconnect:", err);
-        // fetchEventSource auto-reconnects — don't throw
       },
 
-      // Reconnect after every close (it's a long-lived connection)
       openWhenHidden: true,
-    }).catch(() => {
-      // Silently ignore — this fires when ctrl.current.abort() is called
-    });
+    }).catch(() => { /* abort() fires here — expected */ });
 
-    return () => {
-      ctrl.current?.abort();
-    };
-  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { ctrl.current?.abort(); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 }

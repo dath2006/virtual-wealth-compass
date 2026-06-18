@@ -41,8 +41,8 @@ export function SidebarNav() {
             <span className="text-base font-bold">₹</span>
           </div>
           <div className="min-w-0">
-            <div className="truncate text-sm font-semibold">Productivity</div>
-            <div className="truncate text-[11px] text-muted-foreground">Economy</div>
+            <div className="truncate text-sm font-semibold">Effex</div>
+            <div className="truncate text-[11px] text-muted-foreground">Virtual Economy</div>
           </div>
         </div>
 

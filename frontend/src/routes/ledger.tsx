@@ -1,12 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { Search, Download, Minus } from "lucide-react";
+import { Search, Download, Minus, ChevronDown, ChevronUp } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { PageLayout } from "@/components/layout/PageLayout";
 import { CategoryBadge } from "@/components/ui/CategoryBadge";
-import { getLedger, exportLedgerCSV, submitDeduction, overrideRejection } from "@/lib/dataService";
+import { getLedger, exportLedgerCSV, submitDeduction, overrideRejection, getDeductions } from "@/lib/dataService";
 import { fmtINR, fmtTime } from "@/lib/formatters";
 import { useToast } from "@/lib/toast";
 import type { LedgerCategory } from "@/lib/types";
@@ -22,7 +22,9 @@ export const Route = createFileRoute("/ledger")({
 });
 
 const allCategories: LedgerCategory[] = [
-  "NFC", "SMS_UPI", "STEP_INCOME", "LAZY_TAX", "DISTRACTION", "OATH", "OATH_REPAY", "REVERSAL", "MANUAL",
+  "NFC", "SMS_UPI", "NOTIFICATION_UPI", "STEP_INCOME", "LAZY_TAX",
+  "DISTRACTION", "OATH", "OATH_LOAN", "OATH_INTEREST", "OATH_REPAY",
+  "REVERSAL", "MANUAL", "BOSS_REWARD", "SURGE", "MERCY_SPEND",
 ];
 
 function LedgerPage() {
@@ -360,7 +362,7 @@ function LedgerPage() {
                     <div className="rounded-2xl bg-warning/10 p-3 text-xs text-warning-foreground mb-4">
                       <b>Override available</b> — apply anyway with a 20% stubbornness tax.
                       <br />Total cost: <b>{fmtINR(penaltyResult.override_cost ?? 0)}</b>
-                      {" "}(incl. ₹{penaltyResult.override_tax} stubbornness tax)
+                      {" "}(incl. {fmtINR(penaltyResult.override_tax ?? 0)} stubbornness tax)
                     </div>
                   )}
 
@@ -384,6 +386,77 @@ function LedgerPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Deduction History */}
+      <DeductionHistory />
+
     </PageLayout>
+  );
+}
+
+function DeductionHistory() {
+  const [open, setOpen] = useState(false);
+  const q = useQuery({
+    queryKey: ["deductions"],
+    queryFn: () => getDeductions(50),
+    enabled: open,
+  });
+
+  const VERDICT_STYLE: Record<string, string> = {
+    APPROVED: "bg-emerald-100 text-emerald-700",
+    REDUCED:  "bg-amber-100 text-amber-700",
+    REJECTED: "bg-destructive/15 text-destructive",
+  };
+
+  return (
+    <div className="mt-4">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between rounded-2xl bg-white/55 px-4 py-3 text-sm font-semibold hover:bg-white/70 transition"
+      >
+        <span>Self-Penalty History</span>
+        {open ? <ChevronUp className="size-4 text-muted-foreground" /> : <ChevronDown className="size-4 text-muted-foreground" />}
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="pt-2 space-y-2">
+              {q.isLoading && (
+                <p className="text-center text-sm text-muted-foreground py-4">Loading…</p>
+              )}
+              {!q.isLoading && (q.data ?? []).length === 0 && (
+                <p className="text-center text-sm text-muted-foreground py-4">No self-penalties submitted yet.</p>
+              )}
+              {(q.data ?? []).map((d) => (
+                <div key={d.id} className="glass rounded-xl px-4 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{d.reason}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {new Date(d.created_at_ms).toLocaleDateString()} · asked {fmtINR(d.original_amount)}
+                        {d.amount_deducted != null && d.amount_deducted !== d.original_amount && (
+                          <> · applied {fmtINR(d.amount_deducted)}</>
+                        )}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1 italic">{d.reasoning}</p>
+                    </div>
+                    <span className={`chip shrink-0 text-[10px] ${VERDICT_STYLE[d.verdict] ?? "bg-muted text-muted-foreground"}`}>
+                      {d.verdict}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }

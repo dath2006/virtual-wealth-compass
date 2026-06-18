@@ -2,9 +2,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Moon, Sun, Dumbbell, Flame, Zap, TrendingUp, Clock, Star } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PageLayout } from "@/components/layout/PageLayout";
-import { getWellnessDashboard, startSleep, wakeSleep, logExercise } from "@/lib/dataService";
+import { getWellnessDashboard, startSleep, wakeSleep, logExercise, getSleepCurrent } from "@/lib/dataService";
 import { useToast } from "@/lib/toast";
 import { fmtINR } from "@/lib/formatters";
 
@@ -131,6 +131,31 @@ function ExerciseModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+function SleepElapsedTimer({
+  sleepAtMs,
+  serverElapsedHours,
+}: {
+  sleepAtMs: number;
+  serverElapsedHours?: number;
+}) {
+  const [elapsedMs, setElapsedMs] = useState(() => Date.now() - sleepAtMs);
+
+  useEffect(() => {
+    const id = setInterval(() => setElapsedMs(Date.now() - sleepAtMs), 60_000);
+    return () => clearInterval(id);
+  }, [sleepAtMs]);
+
+  const hours = Math.floor(elapsedMs / 3_600_000);
+  const mins  = Math.floor((elapsedMs % 3_600_000) / 60_000);
+  const startTime = new Date(sleepAtMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  return (
+    <span>
+      Started {startTime} · <span className="font-semibold text-indigo-400">{hours}h {mins}m</span> sleeping
+    </span>
+  );
+}
+
 function WellnessPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -139,6 +164,13 @@ function WellnessPage() {
   const dashboard = useQuery({
     queryKey: ["wellness"],
     queryFn: getWellnessDashboard,
+    refetchInterval: 60_000,
+  });
+
+  // Live sleep state — polls every 60s when sleeping for elapsed hours
+  const sleepCurrent = useQuery({
+    queryKey: ["sleep_current"],
+    queryFn: getSleepCurrent,
     refetchInterval: 60_000,
   });
 
@@ -209,7 +241,10 @@ function WellnessPage() {
                 </div>
                 {isSleeping && data?.current_sleep?.sleep_at_ms && (
                   <div className="text-sm text-muted-foreground">
-                    Started {new Date(data.current_sleep.sleep_at_ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    <SleepElapsedTimer
+                      sleepAtMs={sleepCurrent.data?.sleep_at_ms ?? data.current_sleep.sleep_at_ms}
+                      serverElapsedHours={sleepCurrent.data?.elapsed_hours}
+                    />
                   </div>
                 )}
               </div>
@@ -352,6 +387,48 @@ function WellnessPage() {
           </div>
         )}
       </motion.div>
+
+      {/* Step History */}
+      {(data?.step_history ?? []).some((s: any) => s.steps > 0) && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="glass mt-4 rounded-3xl p-5"
+        >
+          <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold">
+            <Zap className="size-4 text-blue-500" /> Step Income — Last 30 Days
+          </h3>
+          <div className="space-y-2">
+            {(data?.step_history ?? [])
+              .filter((s: any) => s.steps > 0)
+              .slice(0, 10)
+              .map((s: any, i: number) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.04 }}
+                  className="flex items-center justify-between rounded-2xl bg-white/55 px-4 py-2.5"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg">👟</span>
+                    <div>
+                      <div className="text-sm font-medium">{s.steps.toLocaleString()} steps</div>
+                      <div className="text-xs text-muted-foreground">{s.date}</div>
+                    </div>
+                  </div>
+                  {s.step_income > 0 ? (
+                    <div className="flex items-center gap-1 text-emerald-600 font-semibold text-sm">
+                      <TrendingUp className="size-3.5" />
+                      +{fmtINR(s.step_income)}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">no income</span>
+                  )}
+                </motion.div>
+              ))}
+          </div>
+        </motion.div>
+      )}
 
       {/* Exercise Modal */}
       <AnimatePresence>

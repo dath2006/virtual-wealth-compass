@@ -13,7 +13,7 @@ import { CreditScoreRing } from "@/components/charts/CreditScoreRing";
 import { AnimatedCounter } from "@/components/ui/AnimatedCounter";
 
 import {
-  getBalance, getCreditScore, getLedger, getOaths, getStreak,
+  getBalance, getCreditScore, getLedger, getOaths, getStreak, getSettings,
 } from "@/lib/dataService";
 import { fmtINR, fmtRelative } from "@/lib/formatters";
 import { toISODate } from "@/lib/formatters";
@@ -34,6 +34,7 @@ function Dashboard() {
   const streak    = useQuery({ queryKey: ["streak"],   queryFn: getStreak });
   const credit    = useQuery({ queryKey: ["credit"],   queryFn: getCreditScore });
   const oaths     = useQuery({ queryKey: ["oaths"],    queryFn: getOaths });
+  const settings  = useQuery({ queryKey: ["settings"], queryFn: getSettings });
 
   const todayISO = toISODate(Date.now());
   const todayEntries = useMemo(
@@ -76,7 +77,7 @@ function Dashboard() {
       .filter((e) => new Date(e.timestampMs).getMonth() === new Date().getMonth())
       .reduce((s, e) => s + Math.abs(e.amount), 0);
   }, [ledger.data]);
-  const monthBudget = 3000;
+  const monthBudget = settings.data?.monthlyDiscretionaryBudget ?? 3000;
   const monthPct = Math.min(100, (monthSpend / monthBudget) * 100);
 
   const activeOaths = (oaths.data ?? []).filter((o) => o.status === "ACTIVE" || o.status === "OVERDUE");

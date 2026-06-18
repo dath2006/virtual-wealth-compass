@@ -72,7 +72,8 @@ function MarketplacePage() {
     mutationFn: ({ passType, notes }: { passType: string; notes?: string }) =>
       purchasePass(passType as any, notes),
     onSuccess: (data) => {
-      toast(`Purchased: ${data.pass_type}!`);
+      const guiltTax = data.guilt_tax > 0 ? ` (+${fmtINR(data.guilt_tax)} guilt tax)` : "";
+      toast(`${data.message ?? `Purchased!`}${guiltTax} New balance: ${fmtINR(data.new_balance)}`);
       setPurchaseTarget(null);
       setPurchaseNotes("");
       qc.invalidateQueries({ queryKey: ["marketplace_catalogue"] });

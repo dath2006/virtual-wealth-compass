@@ -6,10 +6,9 @@ import { motion, AnimatePresence } from "framer-motion";
 
 import { PageLayout } from "@/components/layout/PageLayout";
 import {
-  exportLedgerCSV, getDevice, getLedger, getSettings, isMockMode,
+  exportLedgerCSV, getLedger, getSettings, getUsageReport,
   saveSettings, testConnection, getRateSuggestions, applyRateSuggestion, dismissRateSuggestion,
 } from "@/lib/dataService";
-import { mockUsageReport } from "@/lib/mockData";
 import { fmtINR, fmtRelative } from "@/lib/formatters";
 import { useToast } from "@/lib/toast";
 import type { AppCategory, AppSettings } from "@/lib/types";
@@ -38,7 +37,7 @@ const SECTIONS = [
 function SettingsPage() {
   const settingsQ     = useQuery({ queryKey: ["settings"],    queryFn: getSettings });
   const ledgerQ       = useQuery({ queryKey: ["ledger"],      queryFn: getLedger });
-  const deviceQ       = useQuery({ queryKey: ["device"],      queryFn: getDevice });
+  const usageQ        = useQuery({ queryKey: ["usage"],       queryFn: getUsageReport });
   const suggestionsQ  = useQuery({ queryKey: ["suggestions"], queryFn: getRateSuggestions,
     refetchInterval: 300_000 });
   const qc = useQueryClient();
@@ -216,7 +215,7 @@ function SettingsPage() {
 
           {/* Apps */}
           <Section id="apps" title="Distraction App Rules">
-            <AppRulesTable />
+            <AppRulesTable apps={usageQ.data?.apps ?? []} />
           </Section>
 
           {/* Budgets */}
@@ -295,23 +294,15 @@ function SettingsPage() {
                   onChange={(e) => update("apiBaseUrl", e.target.value)}
                   className="w-full rounded-xl border border-white/70 bg-white/70 px-3 py-2 text-sm"
                 />
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  ⚠ URL changes take effect after redeploying — set <code>VITE_API_BASE_URL</code> in your build env.
+                </p>
               </label>
               <div className="rounded-xl bg-white/55 p-3">
-                <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Mock mode</div>
-                <span className={`chip mt-2 ${isMockMode() ? "bg-success/15 text-success-foreground" : "bg-destructive/15 text-destructive"}`}>
-                  {isMockMode() ? "MOCK DATA — ON" : "LIVE API"}
-                </span>
+                <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Connection</div>
+                <span className="chip mt-2 bg-success/15 text-success-foreground">LIVE API</span>
               </div>
             </div>
-            {deviceQ.data && (
-              <div className="mt-3 rounded-xl bg-white/55 p-3 text-sm">
-                <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Device</div>
-                <div className="mt-1 font-mono text-xs text-foreground/80">{deviceQ.data.deviceId}</div>
-                <div className="mt-0.5 text-xs text-muted-foreground">
-                  Last heartbeat {fmtRelative(deviceQ.data.lastHeartbeatMs)} · battery {deviceQ.data.batteryPct}%
-                </div>
-              </div>
-            )}
             <button
               onClick={async () => {
                 const ok = await testConnection();
@@ -338,7 +329,7 @@ function SettingsPage() {
               </button>
               <button
                 onClick={() => {
-                  const data = JSON.stringify({ settings: s, ledger: ledgerQ.data, device: deviceQ.data }, null, 2);
+                  const data = JSON.stringify({ settings: s, ledger: ledgerQ.data }, null, 2);
                   download(data, "backup.json", "application/json");
                   toast("Full backup downloaded");
                 }}
@@ -408,8 +399,14 @@ function InfoTable({ title, rows }: { title: string; rows: [string, string][] })
   );
 }
 
-function AppRulesTable() {
-  const [apps, setApps] = useState(mockUsageReport.apps.map((a) => ({ ...a })));
+function AppRulesTable({ apps: liveApps }: { apps: any[] }) {
+  const [apps, setApps] = useState(() => (liveApps ?? []).map((a) => ({ ...a })));
+
+  // Sync if live data arrives after first render
+  const prevApps = liveApps;
+  if (apps.length === 0 && liveApps.length > 0) {
+    setApps(liveApps.map((a) => ({ ...a })));
+  }
 
   const update = (i: number, patch: Partial<typeof apps[number]>) => {
     setApps((prev) => prev.map((a, j) => (j === i ? { ...a, ...patch } : a)));
