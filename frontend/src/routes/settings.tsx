@@ -1,54 +1,171 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Download, Plug, Save, Bot, CheckCircle, XCircle } from "lucide-react";
+import {
+  Download, Plug, Save, Bot, CheckCircle, XCircle,
+  TrendingUp, Shield, Clock, Wifi, Zap, Info,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { PageLayout } from "@/components/layout/PageLayout";
 import {
   exportLedgerCSV, getLedger, getSettings, getUsageReport,
-  saveSettings, testConnection, getRateSuggestions, applyRateSuggestion, dismissRateSuggestion,
+  saveSettings, testConnection, getRateSuggestions,
+  applyRateSuggestion, dismissRateSuggestion,
 } from "@/lib/dataService";
-import { fmtINR, fmtRelative } from "@/lib/formatters";
+import { fmtINR } from "@/lib/formatters";
 import { useToast } from "@/lib/toast";
 import type { AppCategory, AppSettings } from "@/lib/types";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
     meta: [
-      { title: "Settings · Productivity Economy" },
-      { name: "description", content: "Configure earning rates, penalties, distraction rules, budgets, oaths, and schedule." },
+      { title: "Settings · Effex" },
+      { name: "description", content: "Configure your virtual economy rules, schedule, and earning rates." },
     ],
   }),
   component: SettingsPage,
 });
 
-const SECTIONS = [
-  { id: "earning",    label: "Earning Rates" },
-  { id: "penalties",  label: "Penalties" },
-  { id: "apps",       label: "Distraction Apps" },
-  { id: "budgets",    label: "Budgets & Caps" },
-  { id: "oath",       label: "Oath Economy" },
-  { id: "schedule",   label: "Schedule" },
-  { id: "device",     label: "Connection" },
-  { id: "backup",     label: "Backup & Export" },
-];
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function Card({
+  icon: Icon,
+  title,
+  description,
+  children,
+}: {
+  icon: React.ElementType;
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="glass rounded-2xl p-5 md:p-6"
+    >
+      <div className="mb-4 flex items-start gap-3">
+        <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+          <Icon className="size-5" />
+        </div>
+        <div>
+          <h2 className="text-base font-semibold tracking-tight">{title}</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+        </div>
+      </div>
+      {children}
+    </motion.div>
+  );
+}
+
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-medium text-foreground/80">{label}</label>
+      {children}
+      {hint && <p className="mt-1 text-[10px] text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
+
+function NumInput({
+  value,
+  onChange,
+  step = 1,
+  min = 0,
+  prefix,
+  suffix,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  step?: number;
+  min?: number;
+  prefix?: string;
+  suffix?: string;
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      {prefix && <span className="text-sm text-muted-foreground">{prefix}</span>}
+      <input
+        type="number"
+        value={value}
+        step={step}
+        min={min}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full rounded-xl border border-white/70 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+      />
+      {suffix && <span className="text-sm text-muted-foreground">{suffix}</span>}
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 
 function SettingsPage() {
-  const settingsQ     = useQuery({ queryKey: ["settings"],    queryFn: getSettings });
-  const ledgerQ       = useQuery({ queryKey: ["ledger"],      queryFn: () => getLedger() });
-  const usageQ        = useQuery({ queryKey: ["usage"],       queryFn: getUsageReport });
-  const suggestionsQ  = useQuery({ queryKey: ["suggestions"], queryFn: getRateSuggestions,
-    refetchInterval: 300_000 });
-  const qc = useQueryClient();
+  const qc       = useQueryClient();
   const { toast } = useToast();
+
+  const settingsQ    = useQuery({ queryKey: ["settings"],    queryFn: getSettings });
+  const ledgerQ      = useQuery({ queryKey: ["ledger"],      queryFn: () => getLedger() });
+  const usageQ       = useQuery({ queryKey: ["usage"],       queryFn: getUsageReport });
+  const suggestionsQ = useQuery({ queryKey: ["suggestions"], queryFn: getRateSuggestions, refetchInterval: 300_000 });
+
+  const [s, setS]         = useState<AppSettings | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDirty,  setIsDirty]  = useState(false);
+  const [connOk,   setConnOk]   = useState<boolean | null>(null);
+  const [testing,  setTesting]  = useState(false);
+
+  useEffect(() => {
+    if (settingsQ.data && !isDirty) setS(settingsQ.data);
+  }, [settingsQ.data]);
+
+  const update = <K extends keyof AppSettings>(k: K, v: AppSettings[K]) => {
+    setS((prev) => prev ? { ...prev, [k]: v } : prev);
+    setIsDirty(true);
+  };
+
+  const handleSave = async () => {
+    if (!s) return;
+    setIsSaving(true);
+    try {
+      await saveSettings(s);
+      qc.invalidateQueries({ queryKey: ["settings"] });
+      setIsDirty(false);
+      toast("Settings saved ✓", "success");
+    } catch (err: any) {
+      toast(`Save failed: ${err.message ?? "server error"}`, "error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleTestConnection = async () => {
+    setTesting(true);
+    setConnOk(null);
+    const ok = await testConnection();
+    setConnOk(ok);
+    setTesting(false);
+    toast(ok ? "Server reachable ✓" : "Cannot reach server ✗", ok ? "success" : "error");
+  };
 
   const applyMutation = useMutation({
     mutationFn: applyRateSuggestion,
     onSuccess: (data) => {
-      toast(`Applied: ${data.field} → ${data.new_value}`);
+      toast(`Applied: ${data.field.replace(/_/g, " ")} → ${data.new_value}`);
       qc.invalidateQueries({ queryKey: ["suggestions"] });
       qc.invalidateQueries({ queryKey: ["settings"] });
+      setIsDirty(false);
     },
     onError: () => toast("Failed to apply suggestion"),
   });
@@ -58,89 +175,90 @@ function SettingsPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["suggestions"] }),
   });
 
-  const [s, setS] = useState<AppSettings | null>(null);
-  useEffect(() => { if (settingsQ.data) setS(settingsQ.data); }, [settingsQ.data]);
-
   if (!s) {
     return (
-      <PageLayout title="Settings"><div className="glass h-40 animate-pulse rounded-2xl" /></PageLayout>
+      <PageLayout title="Settings">
+        <div className="space-y-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="glass h-48 animate-pulse rounded-2xl" />
+          ))}
+        </div>
+      </PageLayout>
     );
   }
-
-  const update = <K extends keyof AppSettings>(k: K, v: AppSettings[K]) =>
-    setS({ ...s, [k]: v });
-
-  const handleSave = async () => {
-    await saveSettings(s);
-    qc.invalidateQueries({ queryKey: ["settings"] });
-    toast("Settings saved");
-  };
 
   return (
     <PageLayout
       title="Settings"
-      subtitle="The constitution of your virtual economy."
+      subtitle="Configure your economy rules, schedule, and rates."
       actions={
         <button
           onClick={handleSave}
-          className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground shadow-sm transition active:scale-[0.97]"
+          disabled={isSaving || !isDirty}
+          className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium shadow-sm transition active:scale-[0.97] ${
+            isDirty
+              ? "bg-primary text-primary-foreground"
+              : "bg-white/60 text-muted-foreground cursor-default"
+          } disabled:opacity-60`}
         >
-          <Save className="size-4" /> Save changes
+          <Save className="size-4" />
+          {isSaving ? "Saving…" : isDirty ? "Save changes" : "No changes"}
         </button>
       }
     >
+      {/* ── AI Rate Advisor ───────────────────────────────────────────────── */}
       <AnimatePresence>
         {(suggestionsQ.data?.length ?? 0) > 0 && (
           <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            className="glass mb-5 rounded-2xl p-5 ring-2 ring-violet/30"
+            initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+            className="mb-5 rounded-2xl bg-violet/5 p-5 ring-2 ring-violet/25"
           >
-            <div className="flex items-center gap-2 mb-3">
+            <div className="mb-3 flex items-center gap-2">
               <Bot className="size-5 text-violet" />
               <h2 className="text-sm font-semibold">AI Rate Advisor</h2>
               <span className="rounded-full bg-violet/15 px-2 py-0.5 text-[10px] font-medium text-violet">
-                {suggestionsQ.data?.length} suggestion{(suggestionsQ.data?.length ?? 0) > 1 ? "s" : ""}
+                {suggestionsQ.data!.length} suggestion{suggestionsQ.data!.length > 1 ? "s" : ""}
               </span>
             </div>
-            <p className="text-xs text-muted-foreground mb-3">
-              Based on your last 7 days of economy data, the AI suggests these adjustments. You decide.
+            <p className="mb-3 text-xs text-muted-foreground">
+              Based on your last 7 days of economy data. Review and apply what makes sense.
             </p>
             <div className="space-y-2">
-              {suggestionsQ.data?.map((sug: any) => (
-                <div key={sug.id} className="rounded-2xl bg-white/70 p-4">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1">
-                      <div className="text-sm font-semibold capitalize">
+              {suggestionsQ.data!.map((sug: any) => (
+                <div key={sug.id} className="rounded-xl bg-white/80 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-semibold">
                         {sug.field.replace(/_/g, " ")}
                         {sug.target_package && (
-                          <span className="ml-2 text-[11px] text-muted-foreground font-normal">
+                          <span className="ml-2 text-[11px] font-normal text-muted-foreground">
                             ({sug.target_package.split(".").pop()})
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-muted-foreground mt-0.5">{sug.reason}</div>
+                      <div className="mt-0.5 text-xs text-muted-foreground">{sug.reason}</div>
                       <div className="mt-2 flex items-center gap-2 text-sm">
                         <span className="line-through text-muted-foreground">{fmtINR(sug.current_value)}</span>
-                        <span>→</span>
+                        <span className="text-muted-foreground">→</span>
                         <span className={`font-semibold ${sug.suggested_value > sug.current_value ? "text-emerald-600" : "text-destructive"}`}>
                           {fmtINR(sug.suggested_value)}
                         </span>
                       </div>
-                      <div className="text-[11px] text-muted-foreground italic mt-1">{sug.impact}</div>
+                      {sug.impact && (
+                        <p className="mt-1 text-[11px] italic text-muted-foreground">{sug.impact}</p>
+                      )}
                     </div>
-                    <div className="flex flex-col gap-2 shrink-0">
+                    <div className="flex shrink-0 flex-col gap-1.5">
                       <button
                         onClick={() => applyMutation.mutate(sug.id)}
                         disabled={applyMutation.isPending}
-                        className="flex items-center gap-1 rounded-xl bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground active:scale-95 transition disabled:opacity-50"
+                        className="flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition active:scale-95 disabled:opacity-50"
                       >
                         <CheckCircle className="size-3.5" /> Apply
                       </button>
                       <button
                         onClick={() => dismissMutation.mutate(sug.id)}
-                        className="flex items-center gap-1 rounded-xl bg-white/70 px-3 py-1.5 text-xs font-medium text-foreground/70 active:scale-95 transition"
+                        className="flex items-center gap-1 rounded-lg bg-white/70 px-3 py-1.5 text-xs font-medium text-foreground/70 transition active:scale-95"
                       >
                         <XCircle className="size-3.5" /> Dismiss
                       </button>
@@ -152,341 +270,283 @@ function SettingsPage() {
           </motion.div>
         )}
       </AnimatePresence>
-      <div className="grid gap-5 md:grid-cols-[180px_minmax(0,1fr)]">
-        {/* Sticky sub-nav */}
-        <aside className="hidden md:block">
-          <nav className="glass sticky top-4 rounded-2xl p-2 text-sm">
-            {SECTIONS.map((sec) => (
-              <a
-                key={sec.id}
-                href={`#${sec.id}`}
-                className="block rounded-lg px-3 py-1.5 text-foreground/70 transition hover:bg-white/70 hover:text-foreground"
-              >
-                {sec.label}
-              </a>
+
+      <div className="space-y-4">
+
+        {/* ── 1. Earning Rates ─────────────────────────────────────────────── */}
+        <Card
+          icon={TrendingUp}
+          title="Earning Rates"
+          description="How much virtual ₹ you earn per hour of focus, steps, and study."
+        >
+          <div className="grid gap-4 md:grid-cols-3">
+            <Field label="Focus earn rate" hint="₹ earned per hour of NFC desk-tag focus">
+              <NumInput value={s.hourlyNfcRate} onChange={(v) => update("hourlyNfcRate", v)} prefix="₹" suffix="/hr" />
+            </Field>
+            <Field label="Step income cap" hint="Max ₹ earned from steps per day">
+              <NumInput value={s.stepDailyCap} onChange={(v) => update("stepDailyCap", v)} prefix="₹" suffix="/day" />
+            </Field>
+            <Field label="Daily study target" hint="Hours needed to hit streak and avoid lazy tax">
+              <NumInput value={s.dailyStudyHours} onChange={(v) => update("dailyStudyHours", v)} step={0.5} min={0.5} suffix="hrs" />
+            </Field>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+            {[
+              { label: "5k+ steps",   value: "50% cap" },
+              { label: "8k+ steps",   value: "80% cap" },
+              { label: "10k+ steps",  value: "100% cap" },
+              { label: "Day 7+ streak", value: "2.0× earn" },
+            ].map(({ label, value }) => (
+              <div key={label} className="rounded-xl bg-white/40 px-3 py-2 text-xs">
+                <div className="font-medium text-foreground/80">{label}</div>
+                <div className="mt-0.5 font-semibold text-primary">{value}</div>
+              </div>
             ))}
-          </nav>
-        </aside>
+          </div>
+        </Card>
 
-        <div className="space-y-5 min-w-0">
-          {/* Earning */}
-          <Section id="earning" title="Earning Rates">
-            <div className="grid gap-3 md:grid-cols-2">
-              <NumberField label="Hourly NFC earn rate (₹/hr)" value={s.hourlyNfcRate} onChange={(v) => update("hourlyNfcRate", v)} />
-              <NumberField label="Step income daily cap (₹/day)" value={s.stepDailyCap} onChange={(v) => update("stepDailyCap", v)} />
-              <NumberField label="Daily study target (hours)" value={s.dailyStudyHours} step={0.5} onChange={(v) => update("dailyStudyHours", v)} />
+        {/* ── 2. Penalties ─────────────────────────────────────────────────── */}
+        <Card
+          icon={Shield}
+          title="Penalties & Taxes"
+          description="Automatic deductions when you miss targets or go into debt."
+        >
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Lazy Tax amount" hint="Deducted each midnight when daily target not reached">
+              <NumInput value={s.lazyTaxAmount} onChange={(v) => update("lazyTaxAmount", v)} prefix="₹" />
+            </Field>
+            <Field label="Bankrupt unlock tax" hint="Extra cost to spend while your balance is negative">
+              <NumInput value={s.unlockTax} onChange={(v) => update("unlockTax", v)} prefix="₹" />
+            </Field>
+            <Field label="Monthly discretionary budget" hint="Real ₹ — used for the spend progress bar on Dashboard">
+              <NumInput value={s.monthlyDiscretionaryBudget} onChange={(v) => update("monthlyDiscretionaryBudget", v)} prefix="₹" suffix="/month" />
+            </Field>
+            <Field label="Oath daily interest rate" hint="% charged per day on active oath loans">
+              <NumInput value={s.defaultDailyInterestPct} step={0.1} onChange={(v) => update("defaultDailyInterestPct", v)} suffix="%" />
+            </Field>
+          </div>
+
+          <div className="mt-4">
+            <div className="mb-2 flex items-center justify-between text-xs">
+              <span className="font-medium text-foreground/80">Lazy Tax threshold</span>
+              <span className="font-semibold text-primary">{s.lazyTaxThresholdPct}% completion required</span>
             </div>
-            <InfoTable
-              title="Step income tiers"
-              rows={[
-                ["10,000+ steps", "100% of cap"],
-                ["8,000–9,999",   "80% of cap"],
-                ["5,000–7,999",   "50% of cap"],
-                ["< 5,000",       "₹0"],
-              ]}
+            <input
+              type="range" min={0} max={100} value={s.lazyTaxThresholdPct}
+              onChange={(e) => update("lazyTaxThresholdPct", +e.target.value)}
+              className="w-full accent-primary"
             />
-            <InfoTable
-              title="Streak multipliers"
-              rows={[["Day 1", "1.0×"], ["Day 3", "1.2×"], ["Day 5", "1.5×"], ["Day 7+", "2.0×"]]}
-            />
-          </Section>
-
-          {/* Penalties */}
-          <Section id="penalties" title="Penalties">
-            <div className="grid gap-3 md:grid-cols-2">
-              <NumberField label="Lazy Tax amount (₹)" value={s.lazyTaxAmount} onChange={(v) => update("lazyTaxAmount", v)} />
-              <NumberField label="Unlock tax (when bankrupt, ₹)" value={s.unlockTax} onChange={(v) => update("unlockTax", v)} />
+            <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
+              <span>0% — never trigger</span>
+              <span>100% — always trigger if under target</span>
             </div>
-            <div className="mt-3">
-              <label className="block text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Lazy Tax threshold: applied when daily completion is below <b>{s.lazyTaxThresholdPct}%</b>
-              </label>
-              <input
-                type="range" min={0} max={100}
-                value={s.lazyTaxThresholdPct}
-                onChange={(e) => update("lazyTaxThresholdPct", +e.target.value)}
-                className="mt-2 w-full accent-primary"
-              />
-            </div>
-            <div className="mt-3 rounded-xl bg-muted/60 p-3 text-xs text-muted-foreground">
-              Over-cap distraction multiplier: <b>2×</b> the base rate when a monthly cap is exceeded.
-            </div>
-          </Section>
+          </div>
 
-          {/* Apps */}
-          <Section id="apps" title="Distraction App Rules">
-            <AppRulesTable apps={usageQ.data?.apps ?? []} />
-          </Section>
-
-          {/* Budgets */}
-          <Section id="budgets" title="Monthly Budgets & Spending Caps">
-            <NumberField label="Monthly discretionary budget (real ₹)" value={s.monthlyDiscretionaryBudget} onChange={(v) => update("monthlyDiscretionaryBudget", v)} />
-            <div className="mt-4 space-y-2">
-              {(Object.keys(s.categoryCaps) as AppCategory[]).map((cat) => {
-                const spent = ledgerQ.data?.filter(e =>
-                  e.category === "DISTRACTION" &&
-                  new Date(e.timestampMs).getMonth() === new Date().getMonth()
-                ).reduce((sum, e) => sum + Math.abs(e.amount), 0) ?? 0;
-                const cap = s.categoryCaps[cat];
-                const pct = cap > 0 ? Math.min(100, (spent / cap) * 100) : 0;
-                return (
-                  <div key={cat} className="rounded-xl bg-white/55 p-3">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium">{cat}</span>
-                      <input
-                        type="number"
-                        value={cap}
-                        onChange={(e) => update("categoryCaps", { ...s.categoryCaps, [cat]: +e.target.value })}
-                        className="w-24 rounded-lg border border-white/70 bg-white/70 px-2 py-1 text-right text-sm"
-                      />
-                    </div>
-                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-                      <div className="h-full bg-primary" style={{ width: `${pct}%` }} />
-                    </div>
-                    <div className="mt-1 text-[11px] text-muted-foreground">
-                      Estimated month spend: {fmtINR(spent)}
-                    </div>
+          {/* Category spending caps */}
+          <div className="mt-4">
+            <div className="mb-2 text-xs font-medium text-foreground/80">Monthly distraction drain caps per category</div>
+            <div className="grid gap-2 md:grid-cols-2">
+              {(Object.keys(s.categoryCaps) as AppCategory[]).map((cat) => (
+                <div key={cat} className="flex items-center gap-3 rounded-xl bg-white/40 px-3 py-2">
+                  <span className="flex-1 text-sm font-medium capitalize">{cat.toLowerCase()}</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground">₹</span>
+                    <input
+                      type="number"
+                      value={s.categoryCaps[cat]}
+                      onChange={(e) => update("categoryCaps", { ...s.categoryCaps, [cat]: +e.target.value })}
+                      className="w-20 rounded-lg border border-white/70 bg-white/70 px-2 py-1 text-right text-sm focus:outline-none focus:ring-1 focus:ring-primary/40"
+                    />
+                    <span className="text-xs text-muted-foreground">/mo</span>
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
-          </Section>
+          </div>
+        </Card>
 
-          {/* Oath */}
-          <Section id="oath" title="Oath Economy">
-            <NumberField label="Default daily interest rate (%)" value={s.defaultDailyInterestPct} step={0.1} onChange={(v) => update("defaultDailyInterestPct", v)} />
-            <InfoTable
-              title="Credit score events"
-              rows={[
-                ["Early repayment",  "+50"],
-                ["On-time repayment", "+25"],
-                ["Default",          "−100"],
-                ["7-day streak",     "+30"],
-              ]}
-            />
-          </Section>
+        {/* ── 3. Schedule ──────────────────────────────────────────────────── */}
+        <Card
+          icon={Clock}
+          title="Schedule"
+          description="Study window and salary day determine when surge pricing applies and when streaks reset."
+        >
+          <div className="grid gap-4 md:grid-cols-3">
+            <Field label="Study window start" hint="Surge pricing activates at this time">
+              <input
+                type="time" value={s.studyHoursStart}
+                onChange={(e) => update("studyHoursStart", e.target.value)}
+                className="w-full rounded-xl border border-white/70 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+              />
+            </Field>
+            <Field label="Study window end" hint="Surge pricing ends at this time">
+              <input
+                type="time" value={s.studyHoursEnd}
+                onChange={(e) => update("studyHoursEnd", e.target.value)}
+                className="w-full rounded-xl border border-white/70 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+              />
+            </Field>
+            <Field label="Salary day" hint="Day of week when weekly bonuses and streak resets are evaluated">
+              <select
+                value={s.salaryDay}
+                onChange={(e) => update("salaryDay", e.target.value as AppSettings["salaryDay"])}
+                className="w-full rounded-xl border border-white/70 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+              >
+                {["SUN","MON","TUE","WED","THU","FRI","SAT"].map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
 
-          {/* Schedule */}
-          <Section id="schedule" title="Schedule">
-            <div className="grid gap-3 md:grid-cols-3">
-              <TimeField label="Study hours start" value={s.studyHoursStart} onChange={(v) => update("studyHoursStart", v)} />
-              <TimeField label="Study hours end"   value={s.studyHoursEnd}   onChange={(v) => update("studyHoursEnd", v)} />
-              <label className="block">
-                <span className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Salary day</span>
-                <select
-                  value={s.salaryDay}
-                  onChange={(e) => update("salaryDay", e.target.value as AppSettings["salaryDay"])}
-                  className="w-full rounded-xl border border-white/70 bg-white/70 px-3 py-2 text-sm"
-                >
-                  {["SUN","MON","TUE","WED","THU","FRI","SAT"].map((d) => <option key={d}>{d}</option>)}
-                </select>
-              </label>
+          {/* Visual surge window bar */}
+          {(() => {
+            const toMins = (t: string) => { const [h, m] = t.split(":").map(Number); return h * 60 + (m ?? 0); };
+            const start = toMins(s.studyHoursStart);
+            const end   = toMins(s.studyHoursEnd);
+            const leftPct  = (start / 1440) * 100;
+            const widthPct = ((end - start) / 1440) * 100;
+            return (
+              <div className="mt-4">
+                <div className="mb-1 text-xs text-muted-foreground flex items-center gap-1.5">
+                  <Zap className="size-3 text-amber-500" />
+                  Surge pricing window: <span className="font-medium text-foreground">{s.studyHoursStart} – {s.studyHoursEnd}</span>
+                </div>
+                <div className="relative h-3 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="absolute h-full rounded-full bg-gradient-to-r from-amber-400 to-red-400"
+                    style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+                  />
+                </div>
+                <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
+                  <span>12am</span><span>6am</span><span>12pm</span><span>6pm</span><span>12am</span>
+                </div>
+              </div>
+            );
+          })()}
+        </Card>
+
+        {/* ── 4. Distraction App Rates (read-only) ─────────────────────────── */}
+        <Card
+          icon={Zap}
+          title="Distraction App Rates"
+          description="Live rates from your backend. Use AI suggestions above to adjust rates — they take effect immediately."
+        >
+          {usageQ.isLoading ? (
+            <div className="h-24 animate-pulse rounded-xl bg-muted/50" />
+          ) : (usageQ.data?.apps ?? []).length === 0 ? (
+            <div className="rounded-xl bg-muted/30 py-6 text-center text-sm text-muted-foreground">
+              No app data yet — rates will appear after the Android app sends its first usage report.
             </div>
-          </Section>
+          ) : (
+            <>
+              <div className="mb-3 flex items-center gap-2 rounded-xl bg-amber-50/80 px-3 py-2 text-xs text-amber-700">
+                <Info className="size-3.5 shrink-0" />
+                Rates are read-only here. Use the AI Advisor suggestions (above) to request rate changes.
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[480px] text-sm">
+                  <thead>
+                    <tr className="text-left text-[10px] uppercase tracking-wider text-muted-foreground">
+                      <th className="pb-2 pr-3">App</th>
+                      <th className="pb-2 pr-3">Category</th>
+                      <th className="pb-2 pr-3">Base ₹/min</th>
+                      <th className="pb-2 pr-3">Surge ₹/min</th>
+                      <th className="pb-2">Today</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(usageQ.data?.apps ?? []).map((app) => (
+                      <tr key={app.packageName} className="border-t border-white/50">
+                        <td className="py-2 pr-3">
+                          <div className="font-medium">{app.appName}</div>
+                          <div className="text-[10px] text-muted-foreground">{app.packageName}</div>
+                        </td>
+                        <td className="py-2 pr-3">
+                          <span className="chip text-[10px]">{app.category}</span>
+                        </td>
+                        <td className="py-2 pr-3 font-mono text-sm">{fmtINR(app.costPerMin)}</td>
+                        <td className="py-2 pr-3">
+                          <span className="font-mono text-sm text-amber-700">{fmtINR(app.surgeCostPerMin)}</span>
+                          {app.surgeEnabled && <Zap className="ml-1 inline size-3 text-amber-500" />}
+                        </td>
+                        <td className="py-2 font-mono text-sm text-muted-foreground">
+                          {app.minutesToday > 0 ? `${app.minutesToday}m` : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </Card>
 
-          {/* Device */}
-          <Section id="device" title="Connection & Device">
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="block">
-                <span className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-muted-foreground">API base URL</span>
-                <input
-                  value={s.apiBaseUrl}
-                  onChange={(e) => update("apiBaseUrl", e.target.value)}
-                  className="w-full rounded-xl border border-white/70 bg-white/70 px-3 py-2 text-sm"
-                />
-                <p className="mt-1 text-[10px] text-muted-foreground">
-                  ⚠ URL changes take effect after redeploying — set <code>VITE_API_BASE_URL</code> in your build env.
-                </p>
-              </label>
-              <div className="rounded-xl bg-white/55 p-3">
-                <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Connection</div>
-                <span className="chip mt-2 bg-success/15 text-success-foreground">LIVE API</span>
+        {/* ── 5. Connection & Export ───────────────────────────────────────── */}
+        <Card
+          icon={Wifi}
+          title="Connection & Export"
+          description="Test your server connection and export your data."
+        >
+          <div className="space-y-4">
+            {/* Connection test */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleTestConnection}
+                disabled={testing}
+                className="inline-flex items-center gap-2 rounded-xl bg-white/70 px-4 py-2 text-sm font-medium text-foreground transition active:scale-[0.97] disabled:opacity-50"
+              >
+                <Plug className="size-4" />
+                {testing ? "Testing…" : "Test connection"}
+              </button>
+              {connOk === true  && <span className="flex items-center gap-1 text-sm text-emerald-600"><CheckCircle className="size-4" /> Connected</span>}
+              {connOk === false && <span className="flex items-center gap-1 text-sm text-destructive"><XCircle className="size-4" /> Unreachable</span>}
+            </div>
+
+            {/* API URL — read-only display */}
+            <div className="rounded-xl bg-muted/30 px-4 py-3">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Server URL</div>
+              <div className="mt-1 font-mono text-sm text-foreground/80">
+                {import.meta.env.VITE_API_BASE_URL || "(set VITE_API_BASE_URL at build time)"}
               </div>
             </div>
-            <button
-              onClick={async () => {
-                const ok = await testConnection();
-                toast(ok ? "Connection OK" : "Connection failed", ok ? "success" : "error");
-              }}
-              className="mt-3 inline-flex items-center gap-2 rounded-xl bg-white/70 px-3.5 py-2 text-sm font-medium text-foreground transition active:scale-[0.97]"
-            >
-              <Plug className="size-4" /> Test connection
-            </button>
-          </Section>
 
-          {/* Backup */}
-          <Section id="backup" title="Backup & Export">
-            <div className="flex flex-wrap gap-2">
+            {/* Export buttons */}
+            <div className="flex flex-wrap gap-2 border-t border-white/40 pt-4">
               <button
                 onClick={() => {
                   const csv = exportLedgerCSV(ledgerQ.data ?? []);
-                  download(csv, "ledger.csv", "text/csv");
-                  toast("Ledger CSV downloaded");
+                  dl(csv, "ledger.csv", "text/csv");
+                  toast("Ledger exported as CSV");
                 }}
-                className="inline-flex items-center gap-2 rounded-xl bg-white/70 px-3.5 py-2 text-sm font-medium text-foreground active:scale-[0.97]"
+                className="inline-flex items-center gap-2 rounded-xl bg-white/70 px-3.5 py-2 text-sm font-medium text-foreground transition active:scale-[0.97]"
               >
-                <Download className="size-4" /> Export Ledger
+                <Download className="size-4" /> Export Ledger (CSV)
               </button>
               <button
                 onClick={() => {
                   const data = JSON.stringify({ settings: s, ledger: ledgerQ.data }, null, 2);
-                  download(data, "backup.json", "application/json");
+                  dl(data, "effex-backup.json", "application/json");
                   toast("Full backup downloaded");
                 }}
-                className="inline-flex items-center gap-2 rounded-xl bg-white/70 px-3.5 py-2 text-sm font-medium text-foreground active:scale-[0.97]"
+                className="inline-flex items-center gap-2 rounded-xl bg-white/70 px-3.5 py-2 text-sm font-medium text-foreground transition active:scale-[0.97]"
               >
-                <Download className="size-4" /> Export Full Backup
+                <Download className="size-4" /> Full Backup (JSON)
               </button>
             </div>
-            <p className="mt-3 text-xs text-muted-foreground">
-              Note: actual encrypted backup is managed from the Android app.
-            </p>
-          </Section>
-        </div>
+          </div>
+        </Card>
+
       </div>
     </PageLayout>
   );
 }
 
-function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
-  return (
-    <section id={id} className="glass rounded-2xl p-5 scroll-mt-6">
-      <h2 className="mb-3 text-base font-semibold tracking-tight">{title}</h2>
-      {children}
-    </section>
-  );
-}
-
-function NumberField({ label, value, onChange, step = 1 }: { label: string; value: number; onChange: (v: number) => void; step?: number }) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</span>
-      <input
-        type="number" value={value} step={step}
-        onChange={(e) => onChange(+e.target.value)}
-        className="w-full rounded-xl border border-white/70 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-      />
-    </label>
-  );
-}
-
-function TimeField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</span>
-      <input
-        type="time" value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-xl border border-white/70 bg-white/70 px-3 py-2 text-sm"
-      />
-    </label>
-  );
-}
-
-function InfoTable({ title, rows }: { title: string; rows: [string, string][] }) {
-  return (
-    <div className="mt-3 rounded-xl bg-muted/60 p-3 text-xs">
-      <div className="mb-1.5 font-semibold text-foreground/80">{title}</div>
-      <div className="grid grid-cols-2 gap-y-1">
-        {rows.map(([k, v]) => (
-          <div key={k} className="contents">
-            <span className="text-muted-foreground">{k}</span>
-            <span className="num text-right text-foreground">{v}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function AppRulesTable({ apps: liveApps }: { apps: any[] }) {
-  const [apps, setApps] = useState(() => (liveApps ?? []).map((a) => ({ ...a })));
-
-  // Sync if live data arrives after first render
-  const prevApps = liveApps;
-  if (apps.length === 0 && liveApps.length > 0) {
-    setApps(liveApps.map((a) => ({ ...a })));
-  }
-
-  const update = (i: number, patch: Partial<typeof apps[number]>) => {
-    setApps((prev) => prev.map((a, j) => (j === i ? { ...a, ...patch } : a)));
-  };
-
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px] text-sm">
-        <thead className="text-left text-[10px] uppercase tracking-wider text-muted-foreground">
-          <tr>
-            <th className="py-2 pr-2">App</th>
-            <th className="py-2 pr-2">Category</th>
-            <th className="py-2 pr-2">₹/min</th>
-            <th className="py-2 pr-2">Surge ₹/min</th>
-            <th className="py-2 pr-2">Cap (min)</th>
-            <th className="py-2 pr-2">Surge</th>
-            <th className="py-2"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {apps.map((a, i) => (
-            <tr key={a.packageName} className="border-t border-white/60">
-              <td className="py-2 pr-2">
-                <input value={a.appName} onChange={(e) => update(i, { appName: e.target.value })}
-                  className="w-full rounded-lg border border-white/70 bg-white/70 px-2 py-1" />
-                <div className="mt-0.5 truncate text-[10px] text-muted-foreground">{a.packageName}</div>
-              </td>
-              <td className="py-2 pr-2">
-                <select value={a.category} onChange={(e) => update(i, { category: e.target.value as any })}
-                  className="rounded-lg border border-white/70 bg-white/70 px-2 py-1">
-                  {["SOCIAL","ENTERTAINMENT","SHOPPING","GAMING"].map(c => <option key={c}>{c}</option>)}
-                </select>
-              </td>
-              <td className="py-2 pr-2">
-                <input type="number" value={a.costPerMin} step={0.5}
-                  onChange={(e) => update(i, { costPerMin: +e.target.value })}
-                  className="w-20 rounded-lg border border-white/70 bg-white/70 px-2 py-1" />
-              </td>
-              <td className="py-2 pr-2">
-                <input type="number" value={a.surgeCostPerMin} step={0.5}
-                  onChange={(e) => update(i, { surgeCostPerMin: +e.target.value })}
-                  className="w-20 rounded-lg border border-white/70 bg-white/70 px-2 py-1" />
-              </td>
-              <td className="py-2 pr-2">
-                <input type="number" value={a.monthlyCapMin}
-                  onChange={(e) => update(i, { monthlyCapMin: +e.target.value })}
-                  className="w-24 rounded-lg border border-white/70 bg-white/70 px-2 py-1" />
-              </td>
-              <td className="py-2 pr-2">
-                <button
-                  onClick={() => update(i, { surgeEnabled: !a.surgeEnabled })}
-                  className={`relative h-5 w-9 rounded-full transition ${a.surgeEnabled ? "bg-primary" : "bg-muted"}`}
-                >
-                  <span className={`absolute top-0.5 size-4 rounded-full bg-white shadow transition ${a.surgeEnabled ? "left-[18px]" : "left-0.5"}`} />
-                </button>
-              </td>
-              <td className="py-2 text-right">
-                <button onClick={() => setApps(apps.filter((_, j) => j !== i))}
-                  className="rounded-lg p-1 text-destructive hover:bg-destructive/10">✕</button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <button
-        onClick={() => setApps([...apps, {
-          packageName: "com.new.app", appName: "New App", category: "SOCIAL",
-          costPerMin: 2, surgeCostPerMin: 4, monthlyCapMin: 300,
-          surgeEnabled: true, minutesToday: 0, minutesThisMonth: 0,
-        }])}
-        className="mt-3 rounded-xl bg-white/70 px-3 py-1.5 text-xs font-medium"
-      >+ Add app</button>
-    </div>
-  );
-}
-
-function download(content: string, filename: string, mime: string) {
+function dl(content: string, filename: string, mime: string) {
   const blob = new Blob([content], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
   a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
 }
