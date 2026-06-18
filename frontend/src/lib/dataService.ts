@@ -40,7 +40,10 @@ const apiFetch = async <T>(path: string, init?: RequestInit): Promise<T> => {
 // ── Ledger ────────────────────────────────────────────────────────────────────
 
 export async function getLedger(limit = 200, offset = 0, category?: string): Promise<LedgerEntry[]> {
-  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  // Guard against TanStack Query passing QueryFunctionContext as first arg
+  const safeLimit  = typeof limit  === "number" ? limit  : 200;
+  const safeOffset = typeof offset === "number" ? offset : 0;
+  const params = new URLSearchParams({ limit: String(safeLimit), offset: String(safeOffset) });
   if (category) params.set("category", category);
   return apiFetch<LedgerEntry[]>(`/ledger?${params}`);
 }
@@ -364,7 +367,8 @@ export async function getDeductions(limit = 50): Promise<Array<{
   created_at_ms: number;
   can_override: boolean;
 }>> {
-  return apiFetch(`/deductions?limit=${limit}`);
+  const safeLimit = typeof limit === "number" ? limit : 50;
+  return apiFetch(`/deductions?limit=${safeLimit}`);
 }
 
 // ── Rate suggestions ──────────────────────────────────────────────────────────

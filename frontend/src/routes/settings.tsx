@@ -36,7 +36,7 @@ const SECTIONS = [
 
 function SettingsPage() {
   const settingsQ     = useQuery({ queryKey: ["settings"],    queryFn: getSettings });
-  const ledgerQ       = useQuery({ queryKey: ["ledger"],      queryFn: getLedger });
+  const ledgerQ       = useQuery({ queryKey: ["ledger"],      queryFn: () => getLedger() });
   const usageQ        = useQuery({ queryKey: ["usage"],       queryFn: getUsageReport });
   const suggestionsQ  = useQuery({ queryKey: ["suggestions"], queryFn: getRateSuggestions,
     refetchInterval: 300_000 });

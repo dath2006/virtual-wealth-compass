@@ -28,7 +28,7 @@ const allCategories: LedgerCategory[] = [
 ];
 
 function LedgerPage() {
-  const q = useQuery({ queryKey: ["ledger"], queryFn: getLedger });
+  const q = useQuery({ queryKey: ["ledger"], queryFn: () => getLedger() });
   const [search, setSearch] = useState("");
   const [cats, setCats] = useState<LedgerCategory[]>([]);
   const [spendClass, setSpendClass] = useState<"ALL" | "ESSENTIAL" | "DISCRETIONARY">("ALL");

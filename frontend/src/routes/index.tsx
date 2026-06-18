@@ -29,7 +29,7 @@ export const Route = createFileRoute("/")({
 });
 
 function Dashboard() {
-  const ledger    = useQuery({ queryKey: ["ledger"],   queryFn: getLedger });
+  const ledger    = useQuery({ queryKey: ["ledger"],   queryFn: () => getLedger() });
   const balance   = useQuery({ queryKey: ["balance"],  queryFn: getBalance });
   const streak    = useQuery({ queryKey: ["streak"],   queryFn: getStreak });
   const credit    = useQuery({ queryKey: ["credit"],   queryFn: getCreditScore });
